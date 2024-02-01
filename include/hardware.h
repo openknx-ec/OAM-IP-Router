@@ -27,6 +27,15 @@
 
 #endif
 
+#ifdef BOARD_REG2_PIPICO_W_V1
+
+#define HARDWARE_NAME "REG2_PIPICO_W_V1"
+
+#define OKNXHW_REG2_PIPICO_W_V1
+#include "OpenKNXHardware.h"
+
+#endif
+
 #ifdef BOARD_PIPICO
 
 #define HARDWARE_NAME "PIPICO"

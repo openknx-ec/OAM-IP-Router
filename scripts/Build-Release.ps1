@@ -41,6 +41,9 @@ if (!$?) { exit 1 }
  ../OGM-Common/scripts/setup/reusable/Build-Step.ps1 release_REG1_ETH_V1 firmware-IP-Router-REG1-Eth-V1 uf2
  if (!$?) { exit 1 }
 
+ ../OGM-Common/scripts/setup/reusable/Build-Step.ps1 release_REG2_PiPico_W firmware-IP-Router-REG2-PiPicoW-V1 uf2
+ if (!$?) { exit 1 }
+
 
 # execute generic post-build steps
 lib/OGM-Common/scripts/setup/reusable/Build-Release-Postprocess.ps1 $args[0]
