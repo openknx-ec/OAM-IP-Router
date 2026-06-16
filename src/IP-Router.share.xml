@@ -20,6 +20,13 @@
                   <Enumeration Text="Filtern" Value="3" Id="%AID%_PT-RoutingWithFilter_EN-3" />
                 </TypeRestriction>
               </ParameterType>
+              <ParameterType Id="%AID%_PT-RoutingPhys" Name="RoutingPhys">
+                <TypeRestriction Base="Value" SizeInBit="2">
+                  <Enumeration Text="Blockieren" Value="2" Id="%AID%_PT-RoutingPhys_EN-2" />
+                  <Enumeration Text="Weiterleiten (nur für Testbetrieb!)" Value="1" Id="%AID%_PT-RoutingPhys_EN-1" />
+                  <Enumeration Text="Filtern (abhängig von Ziel- und Koppleradresse)" Value="3" Id="%AID%_PT-RoutingPhys_EN-3" />
+                </TypeRestriction>
+              </ParameterType>
               <ParameterType Id="%AID%_PT-GrpAcknowledge" Name="GrpAcknowledge">
                 <TypeRestriction Base="Value" SizeInBit="1">
                   <Enumeration Text="immer" Value="0" Id="%AID%_PT-GrpAcknowledge_EN-0" />
@@ -57,7 +64,7 @@
               <Parameter Id="%AID%_P-%TT%00004" Name="BroadcastTelSubMain" ParameterType="%AID%_PT-BroadcastLock" Text="Broadcast Telegramme" Value="0">
                 <Property ObjectType="6" PropertyId="53" Offset="0" BitOffset="4" />
               </Parameter>
-              <Parameter Id="%AID%_P-%TT%00005" Name="PhysTelSubMain" ParameterType="%AID%_PT-RoutingWithFilter" Text="Phys. addressierte Telegramme" Value="3">
+              <Parameter Id="%AID%_P-%TT%00005" Name="PhysTelSubMain" ParameterType="%AID%_PT-RoutingPhys" Text="Phys. addressierte Telegramme" Value="3">
                 <Property ObjectType="6" PropertyId="53" Offset="0" BitOffset="6" />
               </Parameter>
               <Parameter Id="%AID%_P-%TT%00006" Name="GrpTelSubMain_14_31" ParameterType="%AID%_PT-RoutingWithFilter" Text="Gruppentelegramme (Hauptgruppe 14 - 31)" Value="3">
@@ -75,7 +82,7 @@
               <Parameter Id="%AID%_P-%TT%00010" Name="RepetitionPhysTelMainSub" ParameterType="%AID%_PT-Bool" Text="Wiederholung von phys. addressierten Telegrammen" Value="1">
                 <Property ObjectType="6" PropertyId="52" Offset="0" BitOffset="5" />
               </Parameter>
-              <Parameter Id="%AID%_P-%TT%00011" Name="PhysTelMainSub" ParameterType="%AID%_PT-RoutingWithFilter" Text="Phys. addressierte Telegramme" Value="3">
+              <Parameter Id="%AID%_P-%TT%00011" Name="PhysTelMainSub" ParameterType="%AID%_PT-RoutingPhys" Text="Phys. addressierte Telegramme" Value="3">
                 <Property ObjectType="6" PropertyId="52" Offset="0" BitOffset="6" />
               </Parameter>
               <Parameter Id="%AID%_P-%TT%00012" Name="RepetitionGrpTelMainSub" ParameterType="%AID%_PT-Bool" Text="Wiederholung von Gruppentelegrammen"  Value="1">
