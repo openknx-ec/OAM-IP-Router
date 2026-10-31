@@ -81,13 +81,14 @@ extra tool. The menu is assembled by the modules that are compiled in:
 
 | Page | What it does |
 |---|---|
-| **Übersicht** `/` | device identity, network state, uptime, and the prog-mode button |
+| **Übersicht** `/overview` | device identity, network state, uptime, and the prog-mode button |
 | **Dateimanager** `/filemanager` | browse, upload, download, delete and rename files on the device flash, create folders, and fetch a file straight from a URL onto the device |
 | **knxOTA** `/knxota` | push a firmware image to *another* device over the KNX bus, as a whole image or as a difference |
 | **Gerätekonsole** `/console` | the full device console in the browser over a WebSocket — the same commands as on the serial line |
-| **IP-Router** `/ipro` | role, multicast, tunnels, routed/filtered/lost counters and bus load; the tunnel list with its connect/disconnect history; the routing decisions (last 32 with hop count, the most frequent group addresses, the filter table); bus and NCN diagnostics in a collapsed section |
+| **IP-Router** `/ipro` | the start page (`/` leads here): role, multicast, tunnels, routed/filtered/lost counters and bus load; the tunnel list with its connect/disconnect history; the routing decisions (last 32 with hop count, the most frequent group addresses, the filter table); bus and NCN diagnostics in a collapsed section |
 | **Gruppenmonitor** `/groupmonitor` | live group telegrams, without ETS |
 | **Display** `/display` | a live image of the OLED, the joystick as buttons, and editors for the widgets and display settings |
+| **WiFi** `/wifi` | WiFi builds only: the connection to the WiFi router, choosing a network from a scan and entering its credentials, and the devices on the own access point |
 
 ### What the REG2 variants add
 
@@ -187,6 +188,8 @@ routing itself.
 | `release_REG2_PICO2_W_DD` | RP2350 (Pico 2 W) | 4 MB + external W25Q128 | none — WiFi |
 | `release_REG2_PICO_ESP_W_DD` | ESP32-S3 | 16 MB | none — WiFi |
 | `release_REG1_TP_BASE_WIFI` | ESP32 (classic) | 8 MB | none — WiFi |
+| `release_PIPICO_BCU_W` | RP2040 (Pico W) on the PiPico BCU Connector | 2 MB | none — WiFi, untested |
+| `release_PIPICO2_BCU_W` | RP2350 (Pico 2 W) on the PiPico2 BCU Connector | 4 MB | none — WiFi, untested |
 | `release_REG2_PICO_ESP_ETH_DD` | ESP32-S3 | 16 MB | W5500 |
 | `release_REG1_ETH` | RP2040 | 16 MB | W5500, no display/SD |
 | `release_REG1_LAN_TP_BASE` | ESP32 (classic) | 8 MB | native |
@@ -221,7 +224,7 @@ from — a plain `pio run` does not refresh it.
 | Mask version | `MV-091A` |
 | OpenKnxId | `0xA1` |
 | ApplicationNumber | `30` (Dev) · `31` (Release) |
-| Version | **Dev `8.1.0`** · **Release `0.9`** |
+| Version | **Dev `8.2.0`** · **Release `0.10`** |
 | Group objects | none — the product is a coupler |
 
 ## Test suite
@@ -265,7 +268,7 @@ skips — is in [`scripts/Test/README.md`](scripts/Test/README.md).
 
 ## Status
 
-Alpha dev build for testers. Routing, tunnelling, the counters and the web interface run on hardware; the
+Beta dev build for testers. Routing, tunnelling, the counters and the web interface run on hardware; the
 routing counters and the towards-TP telegram counter have not yet been measured against a known load.
 
 ## Authors & license
