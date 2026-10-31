@@ -1,7 +1,7 @@
 # Changes
 
 
-## ec/ALPHA-DEV-v8.2.0: 2026-10-25
+## BETA-DEV-v8.2.0: 2026-10-31
 
 ETS product **8.2** (`IP-Router-Dev-v8.2.knxprod`), release variant **0.10**. The ETS parameter block moved in
 the device memory and the ETS application gains the WiFi module, so a device that carries 8.0 or 0.8 needs an ETS
@@ -31,10 +31,16 @@ ESP32; the changes after it are built, not measured on hardware.
 * Change: every text on the display is English (see Libraries)
 * Feature: the display shows a coupler page (role from the own address, routing group, TTL, tunnel use; "Not programmed" without configuration) and a routing page (routed, filtered and lost telegrams per direction); the IP page title leaves the firmware version to the System-Info widget
 * Feature: WiFi firmwares for the REG2 Pico 2 W (RP2350 with display and the on-board W25Q128), the REG2 ESP32-S3 Waveshare Pico without the ETH board and the REG1 LAN TP Base on WiFi instead of its native ETH; they build with `KNX_IP_WIFI`, the own access point and `ping`, and the release builds them with `-Full`
+* Feature: WiFi firmwares for the PiPico BCU Connector with a Pico W (RP2040, 2 MB) and the PiPico2 BCU Connector with a Pico 2 W (RP2350, 4 MB), no display and no SD card; the release builds them with `-Full`. Both are built, not tested on hardware. On the Pico W neither knxOTA nor the network update fits: on RP2040 both stage the image in the filesystem, 731 KB gzip against 588 KB; it is updated over USB
 * Feature: the external flash module (OFM-ExternalFlash) is registered; the Pico 2 W build uses it for its on-board W25Q128
 * Change: unconfigured, or with the default LED functions, INFO1 shows the bus status, INFO2 the network status and INFO3 nothing (KNX-IP status in the Dev application); a configured device keeps its stored values
 * Change: the developer console (`OPENKNX_CONSOLE_DEV`) is built in all targets, the display console `ddc` with it except on the RP2040 2 MB boards, where it does not fit
 * Change: FastCRC uses its 1 KB checksum table instead of the 4 KB one, about 3 KB less flash with the same checksum
+* Change: the status page asks for its data over the shared UI WebSocket instead of polling `/ipro/state`, `/ipro/hist`, `/ipro/bus` and `/ipro/route`; the device sends each answer in chunks of at most 900 bytes and the page keeps the selected refresh interval. The routes remain for scripts
+* Fix: of several requests for state, history, bus and route data that arrived together, only the first was answered and the others were lost; the device now answers one per pass and keeps the rest queued
+* Fix: the filter table tab asks again every 0.5 s while the device prepares the table view and every 2 s while no table is loaded, also with the refresh switched off; before, it was asked only at the cadence of the bus data
+* Feature: the status page shows "Verbinde …" and "Lade Daten …" until its first data arrives
+* Change: `/` opens the IP-Router page, the overview is at `/overview`; the menu lists Übersicht, IP-Router, knxOTA, WiFi, Display, Dateimanager, Gerätekonsole and Gruppenmonitor in this order, as far as the build contains them
 
 ### ETS product
 * Fix: the parameter segment sits at 2200h with 0200h octets, above the filter table at 0200h-21FFh. It was declared at 0100h with 256 octets, shorter than the 295 parameter octets the firmware reads, and the metadata that every save writes from the start of the NVM ran into its first octets. A `static_assert` fails the build when the parameters outgrow the segment
@@ -107,6 +113,9 @@ list; this is what matters for this product.
 * RP2040: the NTP sync no longer blocks the main loop, and after a network update the staged image is released at the next start
 * The browser tab shows the hostname; the LAN mode parameter opens its help page; the network speed widget keeps its values inside the display and starts a new rate base after a pause
 * WiFi: the WiFi routes are registered once; before the web server started, the setup access point added them on every loop pass and drained the heap (ESP32-S3: boot loop)
+* ETS: "Standardparameter" no longer aborts; the empty default of the MQTT prefix failed its own pattern, and the parameter is part of the application although this product has no MQTT. Devices in a project need "update application" to this version
+* Web: a product can open its own page on `/` (`setDefaultPage()`), the overview is at `/overview`; a page can cover itself until its first data arrives; the UI socket carries binary messages, used by the live view of the display; on a phone the menu stays on one line with a burger button
+* Web: the pages declare German as their language, so browsers no longer offer a translation
 
 **OFM-FileTransferModule** `ec/v0.2.0-beta.1` -> `ec/v0.3.0-beta.2`
 * The device info reads the bus voltage of every device over a transport connection of its own, and the info of a device with a router object completes instead of leaving the client busy
@@ -122,6 +131,7 @@ list; this is what matters for this product.
 * The device info closes its scan session with one T_Disconnect, and a lost table reference is asked once more before System 7 falls back to the fixed table base
 * A firmware update over FTC releases the staged image, so the next upload finds the space (RP2040 at the next start, ESP32 at once); the ESP32 images shrink by parsing the commands with `siscanf`
 * `oknx setpa` waits for the button and assigns by serial number; `oknx -i <ip> reset` restarts the interface with `M_Reset`; `oknx serve` owns the KNXnet/IP connections for API, MCP and pages
+* knxOTA page: its script no longer initialises on other pages, the menu item follows the IP-Router page, and the step bar wraps on a phone
 
 **OGM-Common** `ec/v2.0.0-beta.1` -> `ec/v2.0.0-beta.2`
 * The build compares the knxprod it built with the header the firmware uses, and says why when it cannot
@@ -133,12 +143,14 @@ list; this is what matters for this product.
 * REG2 front panel: the I2C scheduler writes the expander LEDs at fixed times on the bus shared with the display, and on RP2040/RP2350 reads the front buttons in its gaps; a short register read no longer reports UP, DOWN, OK and RIGHT pressed at once; an LED is no longer added twice to its function group
 * Console: without `OPENKNX_CONSOLE_DEV` only `leds status`; the version text has room for a long git hash
 * Build: `versions.h` takes the git hash from the folder PlatformIO resolved, the ESP32 partition table is named `partitions_openknx.csv`, the release build detects an IDF build and adds a firmware to `content.xml` only once
+* Build: the ESP32 factory image is merged with the esptool the platform configures; `dependencies.txt` is kept when Git cannot start, instead of being written without any library
 
 **OFM-DeviceDisplay** `4fab100` -> `v0.1.1`
 * Every text on the display is English: menu, options, confirmations, toasts, the gesture and programming overlays and the clock; Dim after, Saver after and Sleep after fit one row with their value
 * The stored display settings take effect after a restart and are written two seconds after the last edit; visibility, duration and order of the rotation widgets are stored
 * The front buttons are read with one expander port read; on RP2040/RP2350 the page chunks go through the I2C scheduler queue, and after a rotation the whole frame is sent again
 * The QR code is drawn with filled modules and a fixed mask; the `ddc` console is built with `OPENKNX_CONSOLE_DEV`; the root menu is ordered without `std::stable_sort`, 14466 bytes less
+* Web view: a live mode streams the display over the UI socket; while the panel is off the page shows no stale image and the BMP export answers 204; the invert checkbox is removed, the preview uses the stored setting
 
 **OFM-SDCard** `v0.1.0` -> `v0.1.1`
 * The SD card menu, the file browser and the format messages are English
@@ -147,9 +159,10 @@ list; this is what matters for this product.
 **OFM-ExternalFlash** `0.0.2` (new)
 * A LittleFS volume on an SPI flash chip, offered to the file transfer as the `efc/` store; the `efc` console is built only with `OPENKNX_CONSOLE_DEV`
 
-**OGM-HardwareConfig** `0f59ba5` -> `0c5a94d` (no tag)
+**OGM-HardwareConfig** `0f59ba5` -> `01e0a2d` (no tag)
 * REG2: the display and expander I2C bus goes to the I2C scheduler, the display front LEDs are INFO1 and INFO2, the prog LED of the ESP32-S3 with display is on GPIO13
 * REG2 Pico: the SPI1 pins of the on-board W25Q128; the Pico W onboard LED shows the WiFi state
+* The OpenKNX-Ready device headers of other vendors moved to `Others` and are included from there; this product uses none of them
 
 
 ## ec/ALPHA-DEV-v8.0.0: 2026-09-15
