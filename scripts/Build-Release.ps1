@@ -221,15 +221,6 @@ if (-not $isSkipFirmware) {
     Write-Host "Skipping firmware builds (SkipFirmware mode)" -ForegroundColor Yellow
 }
 
-# ---- assemble the release: docs into the release root ---------------------------------------
-# Runs AFTER preprocess (which wipes release/) and BEFORE postprocess (which zips release/*), so the
-# copied files land inside the final Release.zip.
-$testGuide = "doc/FTC-Testanleitung.md"
-if (Test-Path $testGuide) {
-    Copy-Item -Force $testGuide "release/"
-    Write-Host "  -> release/FTC-Testanleitung.md" -ForegroundColor Green
-}
-
 # ---- generic post-build steps --------------------------------------------------------------
 lib/OGM-Common/scripts/setup/reusable/Build-Release-Postprocess.ps1 $buildParam
 if (!$?) { exit 1 }
@@ -240,7 +231,6 @@ $package = Get-ChildItem -Path "release" -Filter "OpenKNX-*.zip" -ErrorAction Si
     Where-Object { $_.LastWriteTime -ge $buildStart } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($null -ne $package) {
     $testProfile = "router-all"
-    $testGuideOut = "release/FTC-Testanleitung.md"
     $built = @()
     if (-not $isSkipFirmware) { $built = @($standardTargets); if ($isFull) { $built += $fullTargets } }
     $width = 78
@@ -281,10 +271,6 @@ if ($null -ne $package) {
         Write-SummaryStep "2" "Test" "./scripts/Test/Run-Tests.ps1 -TestProfile $testProfile" Cyan
         Write-SummaryStep "" "" "./scripts/Test/Run-Tests.ps1 -ListProfiles      (the shorter runs)" DarkGray
         Write-SummaryStep "3" "Report" "scripts/Test/Reports/"
-        if (Test-Path $testGuideOut) {
-            Write-Host ""
-            Write-SummaryRow "Guide" $testGuideOut
-        }
     }
     Write-Host $rule -ForegroundColor DarkGray
     Write-Host ""
