@@ -31,7 +31,7 @@ class WidgetIPRouter : public Widget
     void setDisplayModule(i2cDisplay *displayModule) override;
     i2cDisplay *getDisplayModule() const override;
 
-    // Multi-page API: the WidgetsManager rotates pages by time and flips them on button input.
+    // Pages: page 0 is the status card; without auto paging the rotation shows only page 0.
     size_t getPageCount() const override { return PAGE_COUNT; }
     size_t getCurrentPage() const override { return _page; }
     void setPage(size_t page) override;
@@ -41,7 +41,8 @@ class WidgetIPRouter : public Widget
   private:
     enum Page : uint8_t
     {
-        PAGE_IP = 0,
+        PAGE_CARD = 0,
+        PAGE_IP,
         PAGE_COUPLER,
         PAGE_ROUTING,
         PAGE_COUNT
@@ -57,18 +58,11 @@ class WidgetIPRouter : public Widget
     static constexpr uint32_t REDRAW_INTERVAL_MS = 500;
     uint32_t _lastDraw = 0;
     std::string _name = "IP-Router";
-    uint32_t _duration_timerStart = 0;
 
-
-    uint16_t lastRxBytes = 0;
-    uint16_t lastTxBytes = 0;
-
-    void drawIPInfo();
-    void drawCoupler();
-    void drawRouting();
-    void drawHeader(const char *title);
-    void printRow(int16_t y, const char *text);
-    void printCentered(int16_t y, const char *text);
+    void drawCard(Adafruit_SSD1306 &d);
+    void drawIPInfo(Adafruit_SSD1306 &d);
+    void drawCoupler(Adafruit_SSD1306 &d);
+    void drawRouting(Adafruit_SSD1306 &d);
 };
 
 #endif // DEVICE_DISPLAY_MODULE

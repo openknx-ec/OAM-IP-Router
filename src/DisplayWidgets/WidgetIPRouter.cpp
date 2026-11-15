@@ -1,13 +1,17 @@
 #ifdef DEVICE_DISPLAY_MODULE
 #include "WidgetIPRouter.h"
 #include "DeviceDisplay.h"
+#include "DisplayUi.h"
 #include "IPRouterModule.h"
+#include "Icons/UiIcons.h"
 #include "NetworkModule.h"
 #include "OpenKNX.h"
 #include <WiFi.h>
 
+namespace Ui = OpenKNX::Ui;
+
 WidgetIPRouter::WidgetIPRouter(uint32_t displayTime, WidgetFlags action)
-    : _displayTime(displayTime), _action(action), _state(WidgetState::STOPPED), _display(nullptr)
+    : _state(WidgetState::STOPPED), _displayTime(displayTime), _action(action), _display(nullptr)
 {
 }
 
@@ -28,7 +32,6 @@ void WidgetIPRouter::start()
 
     logDebugP("Starting...");
     _state = WidgetState::RUNNING;
-    _duration_timerStart = millis();
     _forceRedraw = true;
 }
 
@@ -78,20 +81,25 @@ void WidgetIPRouter::loop()
     if (_state != WidgetState::RUNNING || !_display)
         return;
 
-    // Rebuild at most every REDRAW_INTERVAL_MS: a full frame plus displayBuff() on every loop pass
-    // is wasted work, and the interface widget has had this throttle all along.
+    // Rebuild at most every REDRAW_INTERVAL_MS, at once after a page change.
     const uint32_t now = millis();
     if (!_forceRedraw && now - _lastDraw < REDRAW_INTERVAL_MS)
         return;
     _lastDraw = now;
     _forceRedraw = false;
 
+    Adafruit_SSD1306 &d = *_display->display;
+    Ui::begin(d);
+    d.clearDisplay();
     switch (_page)
     {
-        case PAGE_COUPLER: drawCoupler(); break;
-        case PAGE_ROUTING: drawRouting(); break;
-        default: drawIPInfo(); break;
+        case PAGE_IP: drawIPInfo(d); break;
+        case PAGE_COUPLER: drawCoupler(d); break;
+        case PAGE_ROUTING: drawRouting(d); break;
+        case PAGE_CARD:
+        default: drawCard(d); break;
     }
+    _display->displayBuff();
 }
 
 uint32_t WidgetIPRouter::getDisplayTime() const
@@ -115,89 +123,131 @@ i2cDisplay *WidgetIPRouter::getDisplayModule() const
 static const unsigned char PROGMEM x_icon[] = {
     0x81, 0x42, 0x24, 0x18, 0x18, 0x24, 0x42, 0x81};
 
-// Clears the frame and draws title, page dots, dwell marker and divider; the caller fills the rows.
-void WidgetIPRouter::drawHeader(const char *title)
+/** @brief Dotted IPv4 into buf without the heap String of IPAddress::toString(). */
+static const char *formatAddr(const IPAddress &a, char *buf, size_t n)
 {
-    _display->display->clearDisplay();
-    _display->display->setTextColor(WHITE);
-    _display->display->setTextSize(1);
-    _display->display->setCursor(0, 0); // title left -- same as every other widget
-    _display->display->print(title);
+    snprintf(buf, n, "%u.%u.%u.%u", (unsigned)a[0], (unsigned)a[1], (unsigned)a[2], (unsigned)a[3]);
+    return buf;
+}
 
-    const uint16_t SCREEN_WIDTH = _display->GetDisplayWidth();
+#ifdef KNX_TUNNELING
+// Format a host-order IPv4 (MSB = first octet, matching the tunnel server's own print) into buf.
+static void formatIp(uint32_t ip, char *buf, size_t n)
+{
+    snprintf(buf, n, "%u.%u.%u.%u",
+             (unsigned)((ip >> 24) & 0xFF), (unsigned)((ip >> 16) & 0xFF),
+             (unsigned)((ip >> 8) & 0xFF), (unsigned)(ip & 0xFF));
+}
+#endif
 
-    // One dot per page, the current one filled; clear of the manager's corner at x >= W-12.
-    const int16_t startX = (int16_t)SCREEN_WIDTH - 12 - PAGE_COUNT * 6;
-    for (uint8_t i = 0; i < PAGE_COUNT; i++)
+/** @brief Card symbol: IP and TP boxes with arrows both ways, in x44..83 y1..27. */
+static void drawIpTpSymbol(Adafruit_SSD1306 &d)
+{
+    d.drawRoundRect(44, 3, 17, 22, 2, WHITE);
+    d.setCursor(47, 10);
+    d.print("IP");
+    d.drawRoundRect(67, 3, 17, 22, 2, WHITE);
+    d.setCursor(70, 10);
+    d.print("TP");
+    d.drawFastHLine(61, 9, 6, WHITE);
+    d.fillTriangle(66, 9, 64, 7, 64, 11, WHITE);
+    d.drawFastHLine(61, 17, 6, WHITE);
+    d.fillTriangle(61, 17, 63, 15, 63, 19, WHITE);
+}
+
+void WidgetIPRouter::drawCard(Adafruit_SSD1306 &d)
+{
+    const uint8_t *badge = Ui::kBadgeError;
+    const char *word = "No bus";
+    const char *detail = "No TP link";
+    char b[24];
+
+    TpUartDataLinkLayer *dll = KNX_TP_DLL; // the secondary link on the router BAU
+    if (!openknxNetwork.established())
     {
-        const int16_t x = startX + i * 6 + 2;
-        if (i == _page)
-            _display->display->fillCircle(x, 4, 2, WHITE);
-        else
-            _display->display->drawCircle(x, 4, 1, WHITE);
+        word = "No LAN";
+        detail = "Check cable";
     }
-
-    // Dwell marker on the divider -- drawn here, inside the rebuild, so it leaves no trail.
-    if (_displayTime > 0)
+    else if (dll)
     {
-        uint32_t elapsedMillis = millis() - _duration_timerStart;
-        if (elapsedMillis >= _displayTime)
+        switch (dll->getTPUart().getBcuState())
         {
-            _duration_timerStart = millis();
-            elapsedMillis = 0;
+            case TPUart::BCU_DISCONNECTED:
+                detail = "Check KNX line";
+                break;
+            case TPUart::BCU_UNINITIALIZED:
+                // Only the first 30 s after boot count as start-up; later an uninitialised BCU means no bus.
+                if (uptime() >= 30) // wrap-safe seconds since boot
+                {
+                    detail = "Check KNX line";
+                    break;
+                }
+                badge = Ui::kBadgeClock;
+                word = "Starting";
+                detail = "TP starting";
+                break;
+            default:
+            {
+                // Bus power loss: bus-powered chip after ~3 unanswered probes, external NCN via VBUS; BCU state lags.
+                if (!dll->getTPUart().busOperational())
+                {
+                    detail = "Check KNX line";
+                    break;
+                }
+                const std::string load = humanBytes(openknx.busLoad.currentBytesPerSec());
+#ifdef KNX_TUNNELING
+                IpTunnelServer &ts = knx.bau().getIpTunnelServer();
+                const uint8_t n = ts.tunnelCount();
+                const KnxIpTunnelConnection *t = n == 1 ? ts.tunnelAt(0) : nullptr;
+                if (t)
+                {
+                    // One client: who it is; the load only while both fit the line.
+                    char ip[16];
+                    formatIp(t->IpAddress, ip, sizeof(ip));
+                    if (snprintf(b, sizeof(b), "%s  %s/s", ip, load.c_str()) > 21)
+                        snprintf(b, sizeof(b), "%s", ip);
+                }
+                else
+                    snprintf(b, sizeof(b), "%u %s  %s/s", (unsigned)n, n == 1 ? "tunnel" : "tunnels", load.c_str());
+#else
+                snprintf(b, sizeof(b), "%s/s", load.c_str());
+#endif
+                // A router routes all the time; the tunnels are the detail, not the state.
+                badge = Ui::kBadgeOk;
+                word = "Routing";
+                detail = b;
+                break;
+            }
         }
-        const uint16_t circlePosition = (uint32_t)SCREEN_WIDTH * elapsedMillis / _displayTime;
-        _display->display->fillCircle(circlePosition, 10, 2, WHITE);
-        _display->display->drawCircle(circlePosition, 10, 2, BLACK);
     }
-    _display->display->drawLine(0, 10, SCREEN_WIDTH, 10, WHITE);
+
+    Ui::statusCard(d, drawIpTpSymbol, badge, word, detail);
+    Ui::pageDots(d, PAGE_COUNT, PAGE_CARD);
 }
 
-void WidgetIPRouter::printRow(int16_t y, const char *text)
+void WidgetIPRouter::drawIPInfo(Adafruit_SSD1306 &d)
 {
-    _display->display->setCursor(0, y);
-    _display->display->print(text);
-}
-
-static void fmtIp(char *b, size_t n, const char *label, const IPAddress &a)
-{
-    snprintf(b, n, "%s%u.%u.%u.%u", label, a[0], a[1], a[2], a[3]);
-}
-
-void WidgetIPRouter::printCentered(int16_t y, const char *text)
-{
-    _display->display->setCursor(((int16_t)_display->GetDisplayWidth() - (int16_t)strlen(text) * 6) / 2, y);
-    _display->display->print(text);
-}
-
-void WidgetIPRouter::drawIPInfo()
-{
-    drawHeader(_name.c_str());
+    Ui::header(d, _name.c_str(), PAGE_COUNT, PAGE_IP);
 
     if (openknxNetwork.established())
     {
-        char b[24];
-        fmtIp(b, sizeof(b), "IP: ", openknxNetwork.localIP());
-        printCentered(20, b);
-        fmtIp(b, sizeof(b), "GW: ", openknxNetwork.gatewayIP());
-        printCentered(30, b);
-        fmtIp(b, sizeof(b), "DNS: ", openknxNetwork.nameServerIP());
-        printCentered(40, b);
+        char b[16]; // "255.255.255.255"
+        Ui::row(d, 0, "IP", formatAddr(openknxNetwork.localIP(), b, sizeof(b)));
+        Ui::row(d, 1, "GW", formatAddr(openknxNetwork.gatewayIP(), b, sizeof(b)));
+        Ui::row(d, 2, "DNS", formatAddr(openknxNetwork.nameServerIP(), b, sizeof(b)));
     }
     else
     {
-        _display->display->drawBitmap(_display->GetDisplayWidth() / 2 - 4, 20, x_icon, 8, 8, WHITE);
-        printCentered(36, "DISCONNECTED");
-        printCentered(50, "Check LAN Cable");
+        d.drawBitmap(d.width() / 2 - 4, 20, x_icon, 8, 8, WHITE);
+        Ui::printCentred(d, 34, "Disconnected");
+        Ui::printCentred(d, 44, "Check LAN Cable");
     }
-
-    _display->displayBuff();
 }
 
-// Role from the own address, routing group, TTL, tunnel use. Every row fits 21 characters.
-void WidgetIPRouter::drawCoupler()
+// Role from the own address, routing group, TTL, tunnel use.
+void WidgetIPRouter::drawCoupler(Adafruit_SSD1306 &d)
 {
-    drawHeader("Coupler");
+    Ui::header(d, "Coupler", PAGE_COUNT, PAGE_COUPLER);
 
     char b[24];
     const uint16_t pa = knx.individualAddress();
@@ -210,49 +260,41 @@ void WidgetIPRouter::drawCoupler()
         snprintf(b, sizeof(b), "Area coupler %u.0", area);
     else
         snprintf(b, sizeof(b), "Line coupler %u.%u", area, line);
-    printRow(14, b);
+    Ui::row(d, 0, b, nullptr);
 
     const char *group = IPRouterModule::routingGroup();
-    snprintf(b, sizeof(b), "Group %s", group[0] ? group : "-");
-    printRow(24, b);
+    Ui::row(d, 1, "Group", group[0] ? group : "-", 8);
 
     const int ttl = IPRouterModule::routingTtl();
     if (ttl < 0)
-        snprintf(b, sizeof(b), "TTL -");
+        snprintf(b, sizeof(b), "-");
     else
-        snprintf(b, sizeof(b), "TTL %d", ttl);
-    printRow(34, b);
+        snprintf(b, sizeof(b), "%d", ttl);
+    Ui::row(d, 2, "TTL", b, 8);
 
 #ifdef KNX_TUNNELING
     IpTunnelServer &ts = knx.bau().getIpTunnelServer();
-    snprintf(b, sizeof(b), "Tunnels %u / %u", (unsigned)ts.tunnelCount(), (unsigned)ts.tunnelMax());
-    printRow(44, b);
+    snprintf(b, sizeof(b), "%u / %u", (unsigned)ts.tunnelCount(), (unsigned)ts.tunnelMax());
+    Ui::row(d, 3, "Tunnels", b, 8);
 #endif
-
-    _display->displayBuff();
 }
 
 // Telegrams per direction: routed, dropped by the filter table, not delivered on that side (tunnel losses included).
-void WidgetIPRouter::drawRouting()
+void WidgetIPRouter::drawRouting(Adafruit_SSD1306 &d)
 {
-    drawHeader("Routing");
+    Ui::header(d, "Routing", PAGE_COUNT, PAGE_ROUTING);
 
     KnxIpCounters &c = knx.bau().getCounters();
     const uint32_t v[6] = {c.routedToKnx(), c.routedToIp(), c.filteredToKnx(), c.filteredToIp(), c.lostToKnx(), c.lostToIp()};
     static const char *const label[3] = {"Routed", "Filter", "Lost"};
-    printRow(14, "        IP>TP  TP>IP");
-    char b[24], to[8];
+    // Columns under "IP>TP" and "TP>IP": humanCount() of a 32-bit counter is at most 5 characters.
+    Ui::row(d, 0, nullptr, "IP>TP  TP>IP", 8);
+    char b[16];
     for (uint8_t i = 0; i < 3; i++)
     {
-        snprintf(to, sizeof(to), "%s", humanCount(v[2 * i]).c_str());
-        snprintf(b, sizeof(b), "%-6s  %5s  %5s", label[i], to, humanCount(v[2 * i + 1]).c_str());
-        printRow(24 + i * 10, b);
+        snprintf(b, sizeof(b), "%5s  %5s", humanCount(v[2 * i]).c_str(), humanCount(v[2 * i + 1]).c_str());
+        Ui::row(d, (uint8_t)(i + 1), label[i], b, 8);
     }
-
-    _display->displayBuff();
 }
-
-
-
 
 #endif // DEVICE_DISPLAY_MODULE
