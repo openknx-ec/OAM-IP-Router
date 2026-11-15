@@ -1,6 +1,15 @@
 # Changes
 
 
+## not released
+
+Firmware only, no ETS change: the display rework of OFM-DeviceDisplay with the widgets of OFM-Network, OGM-Common and OFM-SDCard.
+
+* Change (IP-Router widget): page 1 is a status card: "Routing" with tunnels and load, "No LAN", "No bus", "Starting"; the IP, Coupler and Routing pages follow and draw with the shared helpers
+* Feature: toasts for "Bus lost" (card) and "Bus connected", "Tunnel open" with PA and IP (the IP alone when both do not fit) and "Tunnel closed" with the PA
+* Change: the rotation shows page 1 of every widget, UP/DOWN flip the other pages; Display -> Auto paging turns the rotation through all pages back on. The icon menu is the default menu. These are the defaults: a device that stored its display settings before keeps auto paging on and the text menu until Display -> Auto paging, Icon menu or Reset
+* Change: KNX/BCU and System-Info widgets with a status card; on LAN a Network card, on WiFi the network values in the WiFi widget; toasts for a lost and returned link and for an inserted or removed SD card; the setup QR stays on screen until a phone joins
+
 ## BETA-DEV-v8.2.1: 2026-11-15
 
 Firmware only: the ETS application stays 8.2 (release variant 0.10), no new knxprod and no ETS download.
