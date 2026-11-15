@@ -1,4 +1,8 @@
 #include "IPRouterModule.h"
+#ifdef DEVICE_DISPLAY_MODULE
+    #include "DeviceDisplay.h"
+    #include "Icons/UiIcons.h"
+#endif
 #include <time.h>
 #include <atomic>
 #include <cstring>
@@ -1541,6 +1545,9 @@ void IPRouterModule::loop(bool configured)
     // when something is actually parked.
     if (_closeCh.load(std::memory_order_relaxed) != 0)
         runPendingCloses();
+#ifdef DEVICE_DISPLAY_MODULE
+    noticeTick();
+#endif
 
     // The reservation table changes only on an ETS download; mirroring it every few seconds keeps the
     // web handler off the property heap without costing anything in the hot loop.
@@ -1578,6 +1585,79 @@ void IPRouterModule::loop(bool configured)
     processIproWebRequests();
 #endif
 }
+
+#ifdef DEVICE_DISPLAY_MODULE
+/**
+ * @brief Toasts for bus lost / connected and tunnels opened / closed (the router BAU refuses a busmonitor).
+ * Same sources as WidgetIPRouter: KNX_TP_DLL getBcuState() and busOperational(), IpTunnelServer tunnelCount() / tunnelAt().
+ */
+void IPRouterModule::noticeTick()
+{
+    TpUartDataLinkLayer *dll = KNX_TP_DLL; // the secondary link on the router BAU
+    const uint8_t bcu = dll ? (uint8_t)dll->getTPUart().getBcuState() : (uint8_t)0xFF; // a few calls per loop
+    if (bcu != 0xFF && bcu != TPUart::BCU_BUSMONITOR)
+    {
+        // As the widget card: a connected chip without bus voltage or answers counts as lost (the BCU state follows
+        // 30 s later or never).
+        uint8_t link = bcu;
+        if (link == TPUart::BCU_CONNECTED && !dll->getTPUart().busOperational()) link = TPUart::BCU_DISCONNECTED;
+        const uint32_t now = millis();
+        if (link != _bcuSeen)
+        {
+            if (_bcuSeen == TPUart::BCU_CONNECTED && link == TPUart::BCU_DISCONNECTED && _busUpSeen)
+                openknxDisplayModule.toast(ToastLevel::Error, OpenKNX::Ui::kRowBus, "Bus lost", "Check KNX line");
+            else if (link == TPUart::BCU_CONNECTED && _busUpSeen)
+            {
+                openknxDisplayModule.retractToast("Bus lost");
+                openknxDisplayModule.toast(ToastLevel::Ok, OpenKNX::Ui::kRowBus, "Bus connected");
+            }
+            _bcuSeen = link;
+            _bcuSeenAt = now;
+        }
+        // The first connect counts once it held BUS_SETTLE_MS: an NCN on its own supply connects before its first
+        // VBUS report, so a bus that is off at boot reads up until that report.
+        if (!_busUpSeen && link == TPUart::BCU_CONNECTED && now - _bcuSeenAt >= BUS_SETTLE_MS) _busUpSeen = true;
+    }
+
+    #ifdef KNX_TUNNELING
+    if ((uint32_t)(millis() - _tunPoll) < 500) return;
+    _tunPoll = millis();
+    IpTunnelServer &ts = knx.bau().getIpTunnelServer();
+    uint8_t ch[KNX_TUNNELING] = {};
+    uint16_t pa[KNX_TUNNELING] = {};
+    const uint8_t cnt = ts.tunnelCount();
+    char line[26], ip[16]; // "15.15.255 255.255.255.255"
+    for (uint8_t i = 0; i < cnt && i < KNX_TUNNELING; i++)
+    {
+        const KnxIpTunnelConnection *t = ts.tunnelAt(i);
+        if (!t) continue;
+        ch[i] = t->ChannelId;
+        pa[i] = t->IndividualAddress;
+        if (!_tunValid || memchr(_tunCh, ch[i], sizeof(_tunCh)) != nullptr) continue;
+        formatTunPa(pa[i], line, sizeof(line));
+        formatTunIp(t->IpAddress, ip, sizeof(ip));
+        // "<pa> <ip>" while both fit the narrowest toast row, else the client address alone (the close names the pa)
+        if (strlen(line) + 1 + strlen(ip) <= DisplayToast::NarrowChars)
+        {
+            strncat(line, " ", sizeof(line) - strlen(line) - 1);
+            strncat(line, ip, sizeof(line) - strlen(line) - 1);
+        }
+        else
+            memcpy(line, ip, sizeof(ip));
+        openknxDisplayModule.toast(ToastLevel::Info, OpenKNX::Ui::kRowTunnel, "Tunnel open", line);
+    }
+    for (uint8_t i = 0; _tunValid && i < KNX_TUNNELING; i++)
+    {
+        if (_tunCh[i] == 0 || memchr(ch, _tunCh[i], sizeof(ch)) != nullptr) continue;
+        formatTunPa(_tunPa[i], line, sizeof(line));
+        openknxDisplayModule.toast(ToastLevel::Info, OpenKNX::Ui::kRowTunnel, "Tunnel closed", line);
+    }
+    memcpy(_tunCh, ch, sizeof(_tunCh));
+    memcpy(_tunPa, pa, sizeof(_tunPa));
+    _tunValid = true;
+    #endif
+}
+#endif
 
 void IPRouterModule::setup(bool configured)
 {

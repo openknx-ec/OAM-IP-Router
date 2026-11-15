@@ -50,6 +50,21 @@ class IPRouterModule : public OpenKNX::Module
     void runPendingCloses();          // performs what the flag above asks for; KNX-loop context only
     static IPRouterModule *_instance;
 
+#ifdef DEVICE_DISPLAY_MODULE
+    // Display notices from the bus chip state and the tunnel table, on edges only; the first state seen is the baseline.
+    void noticeTick();
+    uint8_t _bcuSeen = 0xFF;  // bus state as the widget card shows it (connected, disconnected, uninitialised), 0xFF = none yet
+    uint32_t _bcuSeenAt = 0;  // millis() of the last _bcuSeen change
+    bool _busUpSeen = false;  // the first connect (no notice) held BUS_SETTLE_MS
+    static constexpr uint32_t BUS_SETTLE_MS = 3000; // three 1 Hz state probes: the VBUS report and the silence rule had their say
+    #ifdef KNX_TUNNELING
+    uint32_t _tunPoll = 0;
+    bool _tunValid = false;   // _tunCh holds a poll
+    uint8_t _tunCh[KNX_TUNNELING] = {};  // channel ids of the open tunnels at the last poll, 0 = free
+    uint16_t _tunPa[KNX_TUNNELING] = {}; // their individual addresses
+    #endif
+#endif
+
 #ifdef OPENKNX_ROUTE_TRACE
     // The filter table is 8 kB of bits and changes only on an ETS download, but scanning it took ~22 ms
     // in one pass -- a quarter of the loop-time warning. It is scanned in slices under freeLoopTime()
