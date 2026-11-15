@@ -1,6 +1,19 @@
 # Changes
 
 
+## BETA-DEV-v8.2.1: 2026-11-15
+
+Firmware only: the ETS application stays 8.2 (release variant 0.10), no new knxprod and no ETS download.
+
+* Fix (tunnel): after a reset of the bus chip every waiting tunnel telegram gets its confirmation; a client with more than 5 waiting telegrams was disconnected and got 23 of 65 confirmations, now 65 of 65. The router builds with `KNX_TUNNEL_SPILL` and without the tunnel backpressure
+* Change (RP2040, RP2350, WiFi): network name, password and the password of the own WiFi are kept in the last flash sector instead of `/WIFI.TXT` and `/WIFIAP.TXT`; a firmware update keeps them, a file with a final line break is taken over and removed. Older firmware does not read the new storage: after a downgrade the access data must be set again. The ETS help texts of the WiFi data still describe the files until the next ETS version
+* Fix (RP2040, RP2350, WiFi): WiFi power save is switched off after every connect, also after a rejoin
+* Change (WiFi): `net wifi erase` also erases the password of the own WiFi; `erase all` also erases the flash sector with the WiFi access data (RP2040, RP2350)
+* Fix (ESP32): a page request that finds no memory gets 503 instead of aborting the device
+* Fix: the web console drops a log line when the heap has no room for it and names the dropped bytes, instead of restarting the device
+* Fix: a flash save no longer aborts the device when the heap is short; the two sector buffers (4 KB each) are held from the start
+* Change: 7.3 to 8.0 KB more free heap on ESP32 and 11.8 to 12.0 KB on RP2350 from the TP driver (measured on the IP interface); its receive frame ring holds 2048 octets, about 2.7 s of a fully loaded bus while the loop does not run
+
 ## BETA-DEV-v8.2.0: 2026-10-31
 
 ETS product **8.2** (`IP-Router-Dev-v8.2.knxprod`), release variant **0.10**. The ETS parameter block moved in
